@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Racing Leaderboard Dashboard</title>
+    <style>
+        :root {
+            --bg-color: #121214;
+            --container-bg: #1a1a1e;
+            --accent-color: #4f46e5;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --border-color: #2d2d34;
+            --link-color: #3b82f6;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            background: var(--container-bg);
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+        .tab-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            padding: 10px 20px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        .tab-btn.active {
+            background: var(--accent-color);
+            color: white;
+        }
+        .selectors {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+        }
+        .select-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        select {
+            background: #252529;
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            min-width: 180px;
+            cursor: pointer;
+        }
+        .panel { display: none; }
+        .panel.active { display: block; }
+        .table-wrapper {
+            overflow-x: auto;
+            margin-top: 15px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+        th, td {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        th {
+            background-color: #222226;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+        tr:hover td { background-color: #222226; }
+        
+        /* Greyed out logic for unavailable links */
+        tr.unavailable {
+            opacity: 0.4;
+        }
+        
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+        .section-title {
+            font-size: 18px;
+            margin: 25px 0 10px 0;
+            color: var(--text-muted);
+            border-left: 4px solid var(--accent-color);
+            padding-left: 10px;
+        }
+        .loading { text-align: center; padding: 50px; font-size: 18px; }
+        
+        .proof-link {
+            color: var(--link-color);
+            text-decoration: none;
+        }
+        .proof-link:hover {
+            text-decoration: underline;
+        }
+        .no-proof {
+            color: var(--text-muted);
+            font-size: 12px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('leaderboard-tab')">Leaderboard</button>
+        <button class="tab-btn" onclick="switchTab('stats-tab')">Statistics</button>
+    </div>
+
+    <div id="loading" class="loading">Loading records matrix...</div>
+
+    <div id="leaderboard-tab" class="panel active">
+        <div class="selectors">
+            <div class="select-group">
+                <label for="raceSelect">Race Track</label>
+                <select id="raceSelect" onchange="updateLeaderboardView()"></select>
+            </div>
+            <div class="select-group">
+                <label for="vehicleSelect">Vehicle</label>
+                <select id="vehicleSelect" onchange="updateLeaderboardView()"></select>
+            </div>
+        </div>
+
+        <div class="section-title">Active Standings (Personal Bests Only)</div>
+        <div class="table-wrapper">
+            <table id="leaderboardTable">
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th>Player</th>
+                        <th>Time</th>
+                        <th>Best Lap</th>
+                        <th>Date</th>
+                        <th>Proof</th>
+                    </tr>
+                </thead>
+                <tbody id="leaderboardBody"></tbody>
+            </table>
+        </div>
+
+        <div class="section-title">History (All Recorded Submissions)</div>
+        <div class="table-wrapper">
+            <table id="historyTable">
+                <thead>
+                    <tr>
+                        <th>Player</th>
+                        <th>Time</th>
+                        <th>Best Lap</th>
+                        <th>Date</th>
+                        <th>Proof</th>
+                    </tr>
+                </thead>
+                <tbody id="historyBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="stats-tab" class="panel">
+        <div class="section-title">Map Domination (Unique Track Records Held)</div>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th>Player</th>
+                        <th>No. of Track Records</th>
+                    </tr>
+                </thead>
+                <tbody id="statsBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    let rawRecords = [];
+    let uniqueRaces = [];
+    let uniqueVehicles = [];
+
+    function switchTab(tabId) {
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
+        event.target.classList.add('active');
+    }
+
+    // Parse CSV safely including formatting hooks
+    function parseCSV(text) {
+        let lines = text.split(/\r\n|\n/);
+        if (lines.length === 0 || !lines[0]) return [];
+        
+        let headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+        let result = [];
+        
+        for(let i = 1; i < lines.length; i++) {
+            if(!lines[i].trim()) continue;
+            
+            // Regex parsing array limits to avoid splitting links containing raw query parameters
+            let matches = lines[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || lines[i].split(',');
+            let currentline = matches.map(val => val.trim().replace(/^"|"$/g, ''));
+            
+            let obj = {};
+            headers.forEach((header, index) => {
+                obj[header] = currentline[index] !== undefined ? currentline[index] : '';
+            });
+            result.push(obj);
+        }
+        return result;
+    }
+
+    function parseTimeToSeconds(timeStr) {
+        if (!timeStr) return Infinity;
+        const parts = timeStr.split(':');
+        if (parts.length === 2) {
+            return (parseFloat(parts[0]) * 60) + parseFloat(parts[1]);
+        }
+        return parseFloat(parts[0]);
+    }
+
+    async function initData() {
+        // PASTE YOUR REPLACEMENT LINK GENERATED FROM GOOGLE SPREADSHEETS BELOW
+        const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR5jIHEMmalrYcKUIKYb7HddK2MHfVT15BmFKvmElLAoNUU8cp_ZxW_63n3A7WuycX6R_Stffk18dHv/pub?gid=0&single=true&output=csv';
+        
+        try {
+            const response = await fetch(csvUrl);
+            const csvText = await response.text();
+            rawRecords = parseCSV(csvText);
+            
+            uniqueRaces = [...new Set(rawRecords.map(r => r.Race))].filter(Boolean).sort();
+            uniqueVehicles = [...new Set(rawRecords.map(r => r.Vehicle))].filter(Boolean).sort();
+            
+            populateDropdown('raceSelect', uniqueRaces);
+            populateDropdown('vehicleSelect', uniqueVehicles);
+            
+            document.getElementById('loading').style.display = 'none';
+            
+            updateLeaderboardView();
+            calculateGlobalStatistics();
+            
+        } catch (error) {
+            document.getElementById('loading').innerText = "Failed to load spreadsheet data. Check your published link constraints.";
+            console.error(error);
+        }
+    }
+
+    function populateDropdown(elementId, items) {
+        const select = document.getElementById(elementId);
+        select.innerHTML = items.map(item => `<option value="${item}">${item}</option>`).join('');
+    }
+
+    function getProofCell(proofUrl) {
+        if (!proofUrl || proofUrl.trim() === "" || proofUrl.toLowerCase() === "null") {
+            return `<span class="no-proof">No Video</span>`;
+        }
+        return `<a class="proof-link" href="${proofUrl}" target="_blank" rel="noopener noreferrer">Watch Video ↗</a>`;
+    }
+
+    function updateLeaderboardView() {
+        const targetRace = document.getElementById('raceSelect').value;
+        const targetVehicle = document.getElementById('vehicleSelect').value;
+
+        let filteredMatches = rawRecords.filter(r => r.Race === targetRace && r.Vehicle === targetVehicle);
+        filteredMatches.sort((a, b) => parseTimeToSeconds(a.Time) - parseTimeToSeconds(b.Time));
+
+        const lbBody = document.getElementById('leaderboardBody');
+        const histBody = document.getElementById('historyBody');
+
+        if (filteredMatches.length === 0) {
+            const emptyRow = `<tr><td colspan="6" class="no-data">No records found for this combination.</td></tr>`;
+            lbBody.innerHTML = emptyRow;
+            histBody.innerHTML = `<tr><td colspan="5" class="no-data">No records found for this combination.</td></tr>`;
+            return;
+        }
+
+        // Render History View
+        histBody.innerHTML = filteredMatches.map(r => {
+            const isAvailable = String(r.Availability).trim().toUpperCase() !== 'FALSE';
+            const rowClass = isAvailable ? '' : 'class="unavailable"';
+            return `
+                <tr ${rowClass}>
+                    <td>${r.Player}</td>
+                    <td>${r.Time}</td>
+                    <td>${r["Best Lap"]}</td>
+                    <td>${r.Date}</td>
+                    <td>${getProofCell(r.Proof)}</td>
+                </tr>
+            `;
+        }).join('');
+
+        // Process Leaderboard View (Personal Bests Only)
+        let uniquePlayersMap = new Map();
+        filteredMatches.forEach(record => {
+            if (!uniquePlayersMap.has(record.Player)) {
+                uniquePlayersMap.set(record.Player, record);
+            }
+        });
+
+        let cleanLeaderboard = Array.from(uniquePlayersMap.values());
+        
+        let rank = 1;
+        lbBody.innerHTML = cleanLeaderboard.map(r => {
+            const isAvailable = String(r.Availability).trim().toUpperCase() !== 'FALSE';
+            const rowClass = isAvailable ? '' : 'class="unavailable"';
+            return `
+                <tr ${rowClass}>
+                    <td><strong>#${rank++}</strong></td>
+                    <td>${r.Player}</td>
+                    <td>${r.Time}</td>
+                    <td>${r["Best Lap"]}</td>
+                    <td>${r.Date}</td>
+                    <td>${getProofCell(r.Proof)}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function calculateGlobalStatistics() {
+        let trackRecordHolders = {};
+
+        uniqueRaces.forEach(race => {
+            uniqueVehicles.forEach(vehicle => {
+                let matches = rawRecords.filter(r => r.Race === race && r.Vehicle === vehicle);
+                if(matches.length > 0) {
+                    let topRecord = matches.reduce((fastest, current) => {
+                        return parseTimeToSeconds(current.Time) < parseTimeToSeconds(fastest.Time) ? current : fastest;
+                    }, matches[0]);
+
+                    trackRecordHolders[topRecord.Player] = (trackRecordHolders[topRecord.Player] || 0) + 1;
+                }
+            });
+        });
+
+        let sortedStats = Object.keys(trackRecordHolders).map(player => {
+            return { name: player, count: trackRecordHolders[player] };
+        }).sort((a, b) => b.count - a.count);
+
+        const statsBody = document.getElementById('statsBody');
+        if (sortedStats.length === 0) {
+            statsBody.innerHTML = `<tr><td colspan="3" class="no-data">No statistics available.</td></tr>`;
+            return;
+        }
+
+        let rank = 1;
+        statsBody.innerHTML = sortedStats.map(row => `
+            <tr>
+                <td><strong>#${rank++}</strong></td>
+                <td>${row.name}</td>
+                <td>${row.count} track records</td>
+            </tr>
+        `).join('');
+    }
+
+    window.onload = initData;
+</script>
+</body>
+</html>
