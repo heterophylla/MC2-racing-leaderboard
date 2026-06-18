@@ -22,7 +22,7 @@
             padding: 20px;
         }
         .container {
-            max-width: 1100px;
+            max-width: 1200px;
             margin: 0 auto;
             background: var(--container-bg);
             padding: 24px;
@@ -69,7 +69,7 @@
             padding: 8px 16px;
             border-radius: 6px;
             font-size: 14px;
-            min-width: 180px;
+            min-width: 220px;
             cursor: pointer;
         }
         .panel { display: none; }
@@ -77,6 +77,7 @@
         .table-wrapper {
             overflow-x: auto;
             margin-top: 15px;
+            margin-bottom: 30px;
         }
         table {
             width: 100%;
@@ -94,7 +95,6 @@
         }
         tr:hover td { background-color: #222226; }
         
-        /* Greyed out logic for unavailable links */
         tr.unavailable {
             opacity: 0.4;
         }
@@ -125,6 +125,11 @@
             color: var(--text-muted);
             font-size: 12px;
             font-style: italic;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 20px;
         }
     </style>
 </head>
@@ -167,7 +172,7 @@
             </table>
         </div>
 
-        <div class="section-title">History (All Recorded Submissions)</div>
+        <div class="section-title">History Progression (Oldest Submissions to Newest Record Improvements)</div>
         <div class="table-wrapper">
             <table id="historyTable">
                 <thead>
@@ -185,18 +190,55 @@
     </div>
 
     <div id="stats-tab" class="panel">
-        <div class="section-title">Map Domination (Unique Track Records Held)</div>
-        <div class="table-wrapper">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Rank</th>
-                        <th>Player</th>
-                        <th>No. of Track Records</th>
-                    </tr>
-                </thead>
-                <tbody id="statsBody"></tbody>
-            </table>
+        <div class="stats-grid">
+            <div>
+                <div class="section-title">Top Players: Veloci Vehicle Records</div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Player</th>
+                                <th>Records</th>
+                            </tr>
+                        </thead>
+                        <tbody id="velociStatsBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div>
+                <div class="section-title">Top Players: SLF450x Vehicle Records</div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Player</th>
+                                <th>Records</th>
+                            </tr>
+                        </thead>
+                        <tbody id="slfStatsBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <div class="section-title">Top Map Completion Presence</div>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Player</th>
+                            <th>Total Unique Maps</th>
+                            <th>Percent Coverage</th>
+                        </tr>
+                    </thead>
+                    <tbody id="presenceStatsBody"></tbody>
+                </table>
+            </div>
         </div>
     </div>
 </div>
@@ -210,31 +252,47 @@
         document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         document.getElementById(tabId).classList.add('active');
-        event.target.classList.add('active');
+        if(event) event.target.classList.add('active');
     }
 
-    // Parse CSV safely including formatting hooks
+    // Fully RFC 4180 Compliant CSV Parser Tokenizer Engine
     function parseCSV(text) {
         let lines = text.split(/\r\n|\n/);
         if (lines.length === 0 || !lines[0]) return [];
         
-        let headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+        // Extract headers from the first row safely
+        let headers = CSVlineToArray(lines[0]);
         let result = [];
         
-        for(let i = 1; i < lines.length; i++) {
-            if(!lines[i].trim()) continue;
-            
-            // Regex parsing array limits to avoid splitting links containing raw query parameters
-            let matches = lines[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || lines[i].split(',');
-            let currentline = matches.map(val => val.trim().replace(/^"|"$/g, ''));
+        for (let i = 1; i < lines.length; i++) {
+            if (!lines[i].trim()) continue;
+            let currentline = CSVlineToArray(lines[i]);
             
             let obj = {};
             headers.forEach((header, index) => {
-                obj[header] = currentline[index] !== undefined ? currentline[index] : '';
+                let val = currentline[index] !== undefined ? currentline[index] : '';
+                obj[header.trim()] = val.trim();
             });
             result.push(obj);
         }
         return result;
+    }
+
+    // Secondary helper tokenizing items containing explicit quotation matrices or commas
+    function CSVlineToArray(text) {
+        let re_valid = /^\s*(?:'[^'\\]*(?:\\[\S\s][^'\\]*)*'|"[^"\\]*(?:\\[\S\s][^"\\]*)*"|[^,'"\s\\]*(?:\s+[^,'"\s\\]+)*)\s*(?:,\s*(?:'[^'\\]*(?:\\[\S\s][^'\\]*)*'|"[^"\\]*(?:\\[\S\s][^"\\]*)*"|[^,'"\s\\]*(?:\s+[^,'"\s\\]+)*)\s*)*$/;
+        let re_value = /(?!\s*$)\s*(?:'([^'\\]*(?:\\[\S\s][^'\\]*)*)'|"([^"\\]*(?:\\[\S\s][^"\\]*)*)"|([^,'"\s\\]*(?:\s+[^,'"\s\\]+)*))\s*(?:,|$)/g;
+        
+        if (!re_valid.test(text)) return text.split(','); // Fallback if anomaly
+        let a = [];
+        text.replace(re_value, function(m0, m1, m2, m3) {
+            if (m1 !== undefined) a.push(m1.replace(/\\'/g, "'"));
+            else if (m2 !== undefined) a.push(m2.replace(/\\"/g, '"'));
+            else if (m3 !== undefined) a.push(m3);
+            return '';
+        });
+        if (/,\s*$/.test(text)) a.push('');
+        return a;
     }
 
     function parseTimeToSeconds(timeStr) {
@@ -247,16 +305,15 @@
     }
 
     async function initData() {
-        // PASTE YOUR REPLACEMENT LINK GENERATED FROM GOOGLE SPREADSHEETS BELOW
-        const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR5jIHEMmalrYcKUIKYb7HddK2MHfVT15BmFKvmElLAoNUU8cp_ZxW_63n3A7WuycX6R_Stffk18dHv/pub?gid=0&single=true&output=csv';
+        const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR5jIHEMmalrYcKUIKYb7HddK2MHfVT15BmFKvmElLAoNUU8cp_ZxW_63n3A7WuycX6R_Stffk18dHv/pub?gid=0&single=true&output=csv'; 
         
         try {
             const response = await fetch(csvUrl);
             const csvText = await response.text();
             rawRecords = parseCSV(csvText);
             
-            uniqueRaces = [...new Set(rawRecords.map(r => r.Race))].filter(Boolean).sort();
-            uniqueVehicles = [...new Set(rawRecords.map(r => r.Vehicle))].filter(Boolean).sort();
+            uniqueRaces = [...new Set(rawRecords.map(r => r.Race))].filter(r => r && r !== "Race").sort();
+            uniqueVehicles = [...new Set(rawRecords.map(r => r.Vehicle))].filter(v => v && v !== "Vehicle").sort();
             
             populateDropdown('raceSelect', uniqueRaces);
             populateDropdown('vehicleSelect', uniqueVehicles);
@@ -267,7 +324,7 @@
             calculateGlobalStatistics();
             
         } catch (error) {
-            document.getElementById('loading').innerText = "Failed to load spreadsheet data. Check your published link constraints.";
+            document.getElementById('loading').innerText = "Failed to load dataset. Check your published constraints.";
             console.error(error);
         }
     }
@@ -289,8 +346,7 @@
         const targetVehicle = document.getElementById('vehicleSelect').value;
 
         let filteredMatches = rawRecords.filter(r => r.Race === targetRace && r.Vehicle === targetVehicle);
-        filteredMatches.sort((a, b) => parseTimeToSeconds(a.Time) - parseTimeToSeconds(b.Time));
-
+        
         const lbBody = document.getElementById('leaderboardBody');
         const histBody = document.getElementById('historyBody');
 
@@ -301,8 +357,11 @@
             return;
         }
 
-        // Render History View
-        histBody.innerHTML = filteredMatches.map(r => {
+        // 1. Render Progressive History View (Chronological Progression)
+        // Sorts records by Date or original order to capture chronological record updates
+        let historySorted = [...filteredMatches].sort((a, b) => new Date(a.Date) - new Date(b.Date));
+        
+        histBody.innerHTML = historySorted.map(r => {
             const isAvailable = String(r.Availability).trim().toUpperCase() !== 'FALSE';
             const rowClass = isAvailable ? '' : 'class="unavailable"';
             return `
@@ -316,9 +375,10 @@
             `;
         }).join('');
 
-        // Process Leaderboard View (Personal Bests Only)
+        // 2. Process Current Personal Bests Standings View (Sorted by Fast Time)
+        let standingMatches = [...filteredMatches].sort((a, b) => parseTimeToSeconds(a.Time) - parseTimeToSeconds(b.Time));
         let uniquePlayersMap = new Map();
-        filteredMatches.forEach(record => {
+        standingMatches.forEach(record => {
             if (!uniquePlayersMap.has(record.Player)) {
                 uniquePlayersMap.set(record.Player, record);
             }
@@ -344,37 +404,91 @@
     }
 
     function calculateGlobalStatistics() {
-        let trackRecordHolders = {};
+        let velociHolders = {};
+        let slfHolders = {};
+        let mapPresenceMap = new Map(); // Player -> Set of Unique Races completed
 
+        const totalUniqueRacesCount = uniqueRaces.length;
+
+        // Loop through all race/vehicle grids to identify #1 champions
         uniqueRaces.forEach(race => {
             uniqueVehicles.forEach(vehicle => {
                 let matches = rawRecords.filter(r => r.Race === race && r.Vehicle === vehicle);
-                if(matches.length > 0) {
+                if (matches.length > 0) {
                     let topRecord = matches.reduce((fastest, current) => {
                         return parseTimeToSeconds(current.Time) < parseTimeToSeconds(fastest.Time) ? current : fastest;
                     }, matches[0]);
 
-                    trackRecordHolders[topRecord.Player] = (trackRecordHolders[topRecord.Player] || 0) + 1;
+                    // Assign vehicle track achievements
+                    if (vehicle === "Veloci") {
+                        velociHolders[topRecord.Player] = (velociHolders[topRecord.Player] || 0) + 1;
+                    }
+                    if (vehicle === "SLF450x") {
+                        slfHolders[topRecord.Player] = (slfHolders[topRecord.Player] || 0) + 1;
+                    }
                 }
             });
         });
 
-        let sortedStats = Object.keys(trackRecordHolders).map(player => {
-            return { name: player, count: trackRecordHolders[player] };
+        // Calculate unique presence coverage across ALL recorded runs
+        rawRecords.forEach(r => {
+            if (r.Player && r.Race) {
+                if (!mapPresenceMap.has(r.Player)) {
+                    mapPresenceMap.set(r.Player, new Set());
+                }
+                mapPresenceMap.get(r.Player).add(r.Race);
+            }
+        });
+
+        // 1. Render Veloci Board
+        renderStatBoard('velociStatsBody', velociHolders);
+
+        // 2. Render SLF450x Board
+        renderStatBoard('slfStatsBody', slfHolders);
+
+        // 3. Render Presence & Coverage Percentage Board
+        let presenceArray = [];
+        mapPresenceMap.forEach((racesSet, player) => {
+            let totalCompleted = racesSet.size;
+            let percentage = totalUniqueRacesCount > 0 ? (totalCompleted / totalUniqueRacesCount) * 100 : 0;
+            presenceArray.push({ player, totalCompleted, percentage });
+        });
+        
+        presenceArray.sort((a, b) => b.totalCompleted - a.totalCompleted);
+
+        const presenceBody = document.getElementById('presenceStatsBody');
+        if(presenceArray.length === 0) {
+            presenceBody.innerHTML = `<tr><td colspan="4" class="no-data">No items available.</td></tr>`;
+        } else {
+            let rank = 1;
+            presenceBody.innerHTML = presenceArray.map(row => `
+                <tr>
+                    <td><strong>#${rank++}</strong></td>
+                    <td>${row.player}</td>
+                    <td>${row.totalCompleted}</td>
+                    <td>${row.percentage.toFixed(2)}%</td>
+                </tr>
+            `).join('');
+        }
+    }
+
+    function renderStatBoard(tbodyId, dataObject) {
+        const tbody = document.getElementById(tbodyId);
+        let sortedArray = Object.keys(dataObject).map(player => {
+            return { name: player, count: dataObject[player] };
         }).sort((a, b) => b.count - a.count);
 
-        const statsBody = document.getElementById('statsBody');
-        if (sortedStats.length === 0) {
-            statsBody.innerHTML = `<tr><td colspan="3" class="no-data">No statistics available.</td></tr>`;
+        if (sortedArray.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="3" class="no-data">No records held.</td></tr>`;
             return;
         }
 
         let rank = 1;
-        statsBody.innerHTML = sortedStats.map(row => `
+        tbody.innerHTML = sortedArray.map(row => `
             <tr>
                 <td><strong>#${rank++}</strong></td>
                 <td>${row.name}</td>
-                <td>${row.count} track records</td>
+                <td>${row.count}</td>
             </tr>
         `).join('');
     }
