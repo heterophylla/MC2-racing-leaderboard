@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Racing Leaderboard Dashboard</title>
+    <title>Midnight Club II Racing Leaderboard</title>
     <style>
         :root {
             --bg-color: #121214;
@@ -131,6 +131,13 @@
             grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
             gap: 20px;
         }
+        .about-content {
+            line-height: 1.6;
+            color: var(--text-main);
+        }
+        .about-content p {
+            margin-bottom: 15px;
+        }
     </style>
 </head>
 <body>
@@ -139,6 +146,7 @@
     <div class="tabs">
         <button class="tab-btn active" onclick="switchTab('leaderboard-tab')">Leaderboard</button>
         <button class="tab-btn" onclick="switchTab('stats-tab')">Statistics</button>
+        <button class="tab-btn" onclick="switchTab('about-tab')">About</button>
     </div>
 
     <div id="loading" class="loading">Loading records matrix...</div>
@@ -147,7 +155,7 @@
         <div class="selectors">
             <div class="select-group">
                 <label for="raceSelect">Race Track</label>
-                <select id="raceSelect" onchange="updateLeaderboardView()"></select>
+                <select id="raceSelect" onchange="handleRaceChange()"></select>
             </div>
             <div class="select-group">
                 <label for="vehicleSelect">Vehicle</label>
@@ -155,7 +163,7 @@
             </div>
         </div>
 
-        <div class="section-title">Active Standings (Personal Bests Only)</div>
+        <div class="section-title">Leaderboard</div>
         <div class="table-wrapper">
             <table id="leaderboardTable">
                 <thead>
@@ -172,7 +180,7 @@
             </table>
         </div>
 
-        <div class="section-title">History Progression (Oldest Submissions to Newest Record Improvements)</div>
+        <div class="section-title">History Progression</div>
         <div class="table-wrapper">
             <table id="historyTable">
                 <thead>
@@ -192,7 +200,7 @@
     <div id="stats-tab" class="panel">
         <div class="stats-grid">
             <div>
-                <div class="section-title">Top Players: Veloci Vehicle Records</div>
+                <div class="section-title">Top Players: Veloci Records</div>
                 <div class="table-wrapper">
                     <table>
                         <thead>
@@ -208,7 +216,7 @@
             </div>
 
             <div>
-                <div class="section-title">Top Players: SLF450x Vehicle Records</div>
+                <div class="section-title">Top Players: SLF450x Records</div>
                 <div class="table-wrapper">
                     <table>
                         <thead>
@@ -225,7 +233,7 @@
         </div>
 
         <div>
-            <div class="section-title">Top Map Completion Presence</div>
+            <div class="section-title">Top Players: Map Completion</div>
             <div class="table-wrapper">
                 <table>
                     <thead>
@@ -241,12 +249,20 @@
             </div>
         </div>
     </div>
+
+    <div id="about-tab" class="panel">
+        <div class="section-title">About This Leaderboard</div>
+        <div class="about-content">
+            <p>Welcome to MC2 racing leaderboard! This site is actually somehow works lol.</p>
+            <p><strong>Something important:</strong> I'll fill this up later. Runs displaying an opacity filter mean the original source link is unavailable.</p>
+            <p>something something my contacts. Made by tecnovecna</p>
+        </div>
+    </div>
 </div>
 
 <script>
     let rawRecords = [];
     let uniqueRaces = [];
-    let uniqueVehicles = [];
 
     function switchTab(tabId) {
         document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -255,12 +271,21 @@
         if(event) event.target.classList.add('active');
     }
 
-    // Fully RFC 4180 Compliant CSV Parser Tokenizer Engine
+    // Safely parse dd/mm/yyyy into true Date Object
+    function parseCustomDate(dateStr) {
+        if (!dateStr) return new Date(0);
+        let parts = dateStr.split('/');
+        if (parts.length === 3) {
+            // JS Date constructor expects (year, monthIndex, day)
+            return new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+        }
+        return new Date(dateStr); // Fallback
+    }
+
     function parseCSV(text) {
         let lines = text.split(/\r\n|\n/);
         if (lines.length === 0 || !lines[0]) return [];
         
-        // Extract headers from the first row safely
         let headers = CSVlineToArray(lines[0]);
         let result = [];
         
@@ -278,12 +303,11 @@
         return result;
     }
 
-    // Secondary helper tokenizing items containing explicit quotation matrices or commas
     function CSVlineToArray(text) {
         let re_valid = /^\s*(?:'[^'\\]*(?:\\[\S\s][^'\\]*)*'|"[^"\\]*(?:\\[\S\s][^"\\]*)*"|[^,'"\s\\]*(?:\s+[^,'"\s\\]+)*)\s*(?:,\s*(?:'[^'\\]*(?:\\[\S\s][^'\\]*)*'|"[^"\\]*(?:\\[\S\s][^"\\]*)*"|[^,'"\s\\]*(?:\s+[^,'"\s\\]+)*)\s*)*$/;
         let re_value = /(?!\s*$)\s*(?:'([^'\\]*(?:\\[\S\s][^'\\]*)*)'|"([^"\\]*(?:\\[\S\s][^"\\]*)*)"|([^,'"\s\\]*(?:\s+[^,'"\s\\]+)*))\s*(?:,|$)/g;
         
-        if (!re_valid.test(text)) return text.split(','); // Fallback if anomaly
+        if (!re_valid.test(text)) return text.split(',');
         let a = [];
         text.replace(re_value, function(m0, m1, m2, m3) {
             if (m1 !== undefined) a.push(m1.replace(/\\'/g, "'"));
@@ -313,20 +337,30 @@
             rawRecords = parseCSV(csvText);
             
             uniqueRaces = [...new Set(rawRecords.map(r => r.Race))].filter(r => r && r !== "Race").sort();
-            uniqueVehicles = [...new Set(rawRecords.map(r => r.Vehicle))].filter(v => v && v !== "Vehicle").sort();
-            
             populateDropdown('raceSelect', uniqueRaces);
-            populateDropdown('vehicleSelect', uniqueVehicles);
+            
+            // Setup vehicles context dynamically based on the default race
+            handleRaceChange();
             
             document.getElementById('loading').style.display = 'none';
-            
-            updateLeaderboardView();
             calculateGlobalStatistics();
             
         } catch (error) {
             document.getElementById('loading').innerText = "Failed to load dataset. Check your published constraints.";
             console.error(error);
         }
+    }
+
+    // Handles filtering the vehicles dropdown based on what's matching the current race selection
+    function handleRaceChange() {
+        const targetRace = document.getElementById('raceSelect').value;
+        
+        // Find all vehicles used on this track
+        let raceRecords = rawRecords.filter(r => r.Race === targetRace);
+        let validVehicles = [...new Set(raceRecords.map(r => r.Vehicle))].filter(v => v && v !== "Vehicle").sort();
+        
+        populateDropdown('vehicleSelect', validVehicles);
+        updateLeaderboardView();
     }
 
     function populateDropdown(elementId, items) {
@@ -350,32 +384,52 @@
         const lbBody = document.getElementById('leaderboardBody');
         const histBody = document.getElementById('historyBody');
 
-        if (filteredMatches.length === 0) {
+        if (filteredMatches.length === 0 || !targetVehicle) {
             const emptyRow = `<tr><td colspan="6" class="no-data">No records found for this combination.</td></tr>`;
             lbBody.innerHTML = emptyRow;
             histBody.innerHTML = `<tr><td colspan="5" class="no-data">No records found for this combination.</td></tr>`;
             return;
         }
 
-        // 1. Render Progressive History View (Chronological Progression)
-        // Sorts records by Date or original order to capture chronological record updates
-        let historySorted = [...filteredMatches].sort((a, b) => new Date(a.Date) - new Date(b.Date));
+        // --- HISTORY PROGRESSION ENGINE ---
+        // 1. Sort all matches globally from oldest date to newest date first
+        let chronologicalRuns = [...filteredMatches].sort((a, b) => parseCustomDate(a.Date) - parseCustomDate(b.Date));
         
-        histBody.innerHTML = historySorted.map(r => {
-            const isAvailable = String(r.Availability).trim().toUpperCase() !== 'FALSE';
-            const rowClass = isAvailable ? '' : 'class="unavailable"';
-            return `
-                <tr ${rowClass}>
-                    <td>${r.Player}</td>
-                    <td>${r.Time}</td>
-                    <td>${r["Best Lap"]}</td>
-                    <td>${r.Date}</td>
-                    <td>${getProofCell(r.Proof)}</td>
-                </tr>
-            `;
-        }).join('');
+        let progressiveHistory = [];
+        let runningRecordSeconds = Infinity;
 
-        // 2. Process Current Personal Bests Standings View (Sorted by Fast Time)
+        // 2. Step through time. Only append records that genuinely beat the previous best time
+        chronologicalRuns.forEach(run => {
+            let currentSeconds = parseTimeToSeconds(run.Time);
+            if (currentSeconds < runningRecordSeconds) {
+                progressiveHistory.push(run);
+                runningRecordSeconds = currentSeconds;
+            }
+        });
+
+        // 3. Reverse the array so that the newest record is positioned at the top of the table
+        progressiveHistory.reverse();
+
+        // Render History View
+        if (progressiveHistory.length === 0) {
+            histBody.innerHTML = `<tr><td colspan="5" class="no-data">No record history tracked.</td></tr>`;
+        } else {
+            histBody.innerHTML = progressiveHistory.map(r => {
+                const isAvailable = String(r.Availability).trim().toUpperCase() !== 'FALSE';
+                const rowClass = isAvailable ? '' : 'class="unavailable"';
+                return `
+                    <tr ${rowClass}>
+                        <td>${r.Player}</td>
+                        <td>${r.Time}</td>
+                        <td>${r["Best Lap"]}</td>
+                        <td>${r.Date}</td>
+                        <td>${getProofCell(r.Proof)}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // --- CURRENT STANDINGS (PERSONAL BESTS) ENGINE ---
         let standingMatches = [...filteredMatches].sort((a, b) => parseTimeToSeconds(a.Time) - parseTimeToSeconds(b.Time));
         let uniquePlayersMap = new Map();
         standingMatches.forEach(record => {
@@ -406,20 +460,19 @@
     function calculateGlobalStatistics() {
         let velociHolders = {};
         let slfHolders = {};
-        let mapPresenceMap = new Map(); // Player -> Set of Unique Races completed
+        let mapPresenceMap = new Map();
 
-        const totalUniqueRacesCount = uniqueRaces.length;
+        // Scan all unique tracks to compile dynamic unique vehicle arrays
+        let allVehicles = [...new Set(rawRecords.map(r => r.Vehicle))].filter(v => v && v !== "Vehicle");
 
-        // Loop through all race/vehicle grids to identify #1 champions
         uniqueRaces.forEach(race => {
-            uniqueVehicles.forEach(vehicle => {
+            allVehicles.forEach(vehicle => {
                 let matches = rawRecords.filter(r => r.Race === race && r.Vehicle === vehicle);
                 if (matches.length > 0) {
                     let topRecord = matches.reduce((fastest, current) => {
                         return parseTimeToSeconds(current.Time) < parseTimeToSeconds(fastest.Time) ? current : fastest;
                     }, matches[0]);
 
-                    // Assign vehicle track achievements
                     if (vehicle === "Veloci") {
                         velociHolders[topRecord.Player] = (velociHolders[topRecord.Player] || 0) + 1;
                     }
@@ -430,9 +483,8 @@
             });
         });
 
-        // Calculate unique presence coverage across ALL recorded runs
         rawRecords.forEach(r => {
-            if (r.Player && r.Race) {
+            if (r.Player && r.Race && r.Race !== "Race") {
                 if (!mapPresenceMap.has(r.Player)) {
                     mapPresenceMap.set(r.Player, new Set());
                 }
@@ -440,17 +492,13 @@
             }
         });
 
-        // 1. Render Veloci Board
         renderStatBoard('velociStatsBody', velociHolders);
-
-        // 2. Render SLF450x Board
         renderStatBoard('slfStatsBody', slfHolders);
 
-        // 3. Render Presence & Coverage Percentage Board
         let presenceArray = [];
         mapPresenceMap.forEach((racesSet, player) => {
             let totalCompleted = racesSet.size;
-            let percentage = totalUniqueRacesCount > 0 ? (totalCompleted / totalUniqueRacesCount) * 100 : 0;
+            let percentage = uniqueRaces.length > 0 ? (totalCompleted / uniqueRaces.length) * 100 : 0;
             presenceArray.push({ player, totalCompleted, percentage });
         });
         
