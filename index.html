@@ -253,14 +253,44 @@
     <div id="about-tab" class="panel">
         <div class="section-title">About This Leaderboard</div>
         <div class="about-content">
-            <p>Welcome to MC2 racing leaderboard! This site is actually somehow works lol.</p>
-            <p><strong>Something important:</strong> I'll fill this up later. Runs displaying an opacity filter mean the original source link is unavailable.</p>
-            <p>something something my contacts. Made by tecnovecna</p>
+            <p><strong>Welcome to MC2 racing leaderboard!</strong></p>
+            <p>&nbsp;</p>
+            <p>This leaderboard is not pretending to be an alternative to the SRC IL leaderboard, but rather serves to account all existed competitive records.</p>
+            <p>Leaderboard only covers records done in LAN Networking mode.&nbsp;Runs displaying an opacity filter mean the original source link is unavailable.</p>
+            <p>&nbsp;</p>
+            <p>If there is no your records on the board, then you're either too slow, or your run is not meet some criteria for submission, or I simply didn't know 
+                about your records. So you can fill 
+                <strong><a href="https://docs.google.com/forms/d/e/1FAIpQLSeK6l63Nl2s9WhUJgjseLC6rCzzTxjZ3ZbhSOTYjRjn6lrErA/viewform?usp=header" target="_blank">form</a></strong> 
+                to submit record and I'll review it. For the records prior to 2013 I even accept screenshots.</p>
+            <p>Criteria for submission: Provided video or screenshot (for runs prior to 2013), LAN Networking mode, driving alone, no power ups, hud must be visible.</p>
+            <p>You can also contact me in discord @tecnovecna6625 or ping @tecnovecna in speedrunning thread on Midnight Club II discord 
+                <a href="https://discord.gg/BpzRYtUmNP" target="_blank">channel</a>.</p>
+            <p>&nbsp;</p>
+            <p>Leaderboard made by tecnovecna.</p>
         </div>
     </div>
 </div>
 
 <script>
+    // --- CUSTOM TRACK ORDER CONFIGURATION ---
+    // Add your race track names here in the exact order you want them to appear.
+    // Make sure the spelling matches your spreadsheet exactly.
+    const CUSTOM_RACE_ORDER = [
+        // LA
+        "Initiation", "Welcome to the Club", "Takeoff Time", "Triple Threat", "Freeway Rally", "Corner Cutter", "Hollywood Hysteria", "Drag", "Cheaters Never Win", "Unexpected Guests",
+        "Showdown", "Weight Training", "Flight to the Finish", "Block Party", "Slipstream Chicanes", "Crossover", "Droppin' Knowledge", "Stage V - Traction", "Stage VI - Apex",
+        // Paris
+        "Eiffel Visions", "Rooftop Vistas", "Twin Turbo", "Rollercoaster", "Seine Insane", "Swerve", "Roundabout Run", "Over and Under", "The Art of Racing", "Few and Far Between",
+        "Monsoni Monsoon", "Catacomb Criminal", "Extortion", "View From Above", "Haul", "Stage III - Burn", "Stage IV - Turbo",
+        // Tokyo
+        "Shibuya Scramble", "Ricky's Revenge", "Red Herring", "Ichiro's Challenge", "The Real Deal", "Enigma", "Intuition", "Drifter's Playground", "Savant of Speed",
+        "Wisdom Gate", "Karma Rising", "8-9-3", "Oyabun", "Rite of Passage", "Enduro", "Stage I - Intake", "Stage II - Light",
+        // Circuits
+        "LA Turismo", "River Raid", "Runoff", "Arrivals & Departures", "Beverly Trasher",
+        "Freefall", "Louvre Launch", "Tourist Trap", "Arc de Triomphe", "Necro Modellista", "Evening Mass",
+        "Shinjuku Speedway", "Ouroboros", "Sonic Waves", "Tribulation", "Hangtime", "Clouded Vision", "Bullet Train II"
+    ];
+    
     let rawRecords = [];
     let uniqueRaces = [];
 
@@ -336,10 +366,13 @@
             const csvText = await response.text();
             rawRecords = parseCSV(csvText);
             
-            uniqueRaces = [...new Set(rawRecords.map(r => r.Race))].filter(r => r && r !== "Race").sort();
-            populateDropdown('raceSelect', uniqueRaces);
+            let sheetRaces = [...new Set(rawRecords.map(r => r.Race))].filter(r => r && r !== "Race");
+            let finalRaceOrder = [...CUSTOM_RACE_ORDER];
+            let extraSheetRaces = sheetRaces.filter(race => !CUSTOM_RACE_ORDER.includes(race));
+            extraSheetRaces.sort();
             
-            // Setup vehicles context dynamically based on the default race
+            uniqueRaces = finalRaceOrder.concat(extraSheetRaces);
+            populateDropdown('raceSelect', uniqueRaces);
             handleRaceChange();
             
             document.getElementById('loading').style.display = 'none';
